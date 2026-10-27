@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data files (large NGSIM arrays — do not commit)
+data/raw/
+data/processed/
+data/splits/
+data/windows/
+data/rsu/
+*.npy
+*.csv
+
+# Extracted zip from Person 1
+extracted_data/
+*.zip
+
+# Model checkpoints (generated, not source)
+models/*.pt
+
+# Excluded docs
+docs/ARCHITECTURE.md
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+Thumbs.db
+.DS_Store
+
+# Virtual environment
+venv/
+.venv/
+env/
