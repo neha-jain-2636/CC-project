@@ -85,28 +85,28 @@ python -m unittest discover -s tests -v
 CC-project/
 ├── src/
 │   ├── __init__.py
-│   ├── preprocessing.py        # Person 1: NGSIM data pipeline, RSU partitioning
-│   ├── model.py                # Person 2: GRU model architecture
-│   ├── train_utils.py          # Person 2: Training/eval utilities, normalization
-│   ├── predictor.py            # Person 2: Inference API (RSUStatePredictor)
-│   ├── rsu_client.py           # Person 3: Flower RSU client wrapper
-│   ├── base_station.py         # Person 3: FedAvg aggregation strategy
-│   ├── federated_training.py   # Person 3: Federated training orchestration (Flower)
-│   ├── federated_manual.py     # Integration: Manual FedAvg (no ray dependency)
-│   ├── local_training.py       # Person 4: Local-only baseline training
-│   ├── centralized_training.py # Person 4: Centralized baseline (privacy-unsafe)
-│   └── checkpoints.py          # Person 4: Evaluation and comparison utilities
+│   ├── preprocessing.py        
+│   ├── model.py                
+│   ├── train_utils.py          
+│   ├── predictor.py            
+│   ├── rsu_client.py           
+│   ├── base_station.py         
+│   ├── federated_training.py   
+│   ├── federated_manual.py     
+│   ├── local_training.py       
+│   ├── centralized_training.py 
+│   └── checkpoints.py          
 ├── tests/
-│   ├── test_preprocessing.py   # Person 1 tests
-│   ├── test_model.py           # Person 2 tests
-│   ├── test_federated.py       # Person 3 tests
-│   └── test_local_centralized.py # Person 4 tests
+│   ├── test_preprocessing.py  
+│   ├── test_model.py           
+│   ├── test_federated.py      
+│   └── test_local_centralized.py 
 ├── docs/
-│   └── DATASET.md              # Dataset documentation and provenance
-├── run_experiments.py          # Full experiment pipeline
-├── generate_plots.py           # Plot generation
-├── requirements.txt            # Python dependencies
-└── README.md                   # This file
+│   └── DATASET.md              
+├── run_experiments.py          
+├── generate_plots.py           
+├── requirements.txt           
+└── README.md                   
 ```
 
 ## Technical Details
@@ -134,9 +134,9 @@ CC-project/
 
 | Regime | Description | Privacy |
 |--------|-------------|---------|
-| **Local-only** | Each RSU trains independently on its own data | ✅ Private |
-| **FedAvg** | RSUs share weight updates via Base Station | ✅ Private |
-| **Centralized** | All data pooled at one server | ❌ Unsafe |
+| **Local-only** | Each RSU trains independently on its own data |  Private |
+| **FedAvg** | RSUs share weight updates via Base Station |  Private |
+| **Centralized** | All data pooled at one server |  Unsafe |
 
 ### Evaluation Metrics
 
