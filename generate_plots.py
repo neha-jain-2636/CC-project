@@ -138,45 +138,51 @@ def _plot_convergence(results_path: Path, output_path: Path) -> None:
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-    # Validation loss curves
+    # RMSE convergence curves (sqrt of MSE loss)
     colors = {"rsu_1": "#e74c3c", "rsu_2": "#e67e22", "rsu_3": "#f39c12"}
 
     for rsu_id in ["rsu_1", "rsu_2", "rsu_3"]:
         hist_path = results_path / f"local_{rsu_id}_history.json"
         if hist_path.exists():
             hist = json.loads(hist_path.read_text(encoding="utf-8"))
-            ax1.plot(range(1, len(hist["val_loss"]) + 1), hist["val_loss"],
+            val_rmse = [v**0.5 for v in hist["val_loss"]]
+            train_rmse = [v**0.5 for v in hist["train_loss"]]
+            ax1.plot(range(1, len(val_rmse) + 1), val_rmse,
                      label=f"Local {rsu_id}", color=colors[rsu_id],
                      linestyle="--", alpha=0.7)
-            ax2.plot(range(1, len(hist["train_loss"]) + 1), hist["train_loss"],
+            ax2.plot(range(1, len(train_rmse) + 1), train_rmse,
                      label=f"Local {rsu_id}", color=colors[rsu_id],
                      linestyle="--", alpha=0.7)
 
     cent_path = results_path / "centralized_history.json"
     if cent_path.exists():
         hist = json.loads(cent_path.read_text(encoding="utf-8"))
-        ax1.plot(range(1, len(hist["val_loss"]) + 1), hist["val_loss"],
+        val_rmse = [v**0.5 for v in hist["val_loss"]]
+        train_rmse = [v**0.5 for v in hist["train_loss"]]
+        ax1.plot(range(1, len(val_rmse) + 1), val_rmse,
                  label="Centralized", color="#2ecc71", linewidth=2)
-        ax2.plot(range(1, len(hist["train_loss"]) + 1), hist["train_loss"],
+        ax2.plot(range(1, len(train_rmse) + 1), train_rmse,
                  label="Centralized", color="#2ecc71", linewidth=2)
 
     fed_path = results_path / "federated_history.json"
     if fed_path.exists():
         hist = json.loads(fed_path.read_text(encoding="utf-8"))
-        ax1.plot(range(1, len(hist["round_val_loss"]) + 1), hist["round_val_loss"],
+        val_rmse = [v**0.5 for v in hist["round_val_loss"]]
+        train_rmse = [v**0.5 for v in hist["round_train_loss"]]
+        ax1.plot(range(1, len(val_rmse) + 1), val_rmse,
                  label="FedAvg", color="#3498db", linewidth=2, marker="o", markersize=4)
-        ax2.plot(range(1, len(hist["round_train_loss"]) + 1), hist["round_train_loss"],
+        ax2.plot(range(1, len(train_rmse) + 1), train_rmse,
                  label="FedAvg", color="#3498db", linewidth=2, marker="o", markersize=4)
 
     ax1.set_xlabel("Epoch / Round")
-    ax1.set_ylabel("Validation Loss (MSE)")
-    ax1.set_title("Validation Loss Convergence", fontweight="bold")
+    ax1.set_ylabel("Validation RMSE")
+    ax1.set_title("Validation RMSE Convergence", fontweight="bold")
     ax1.legend(fontsize=8)
     ax1.grid(alpha=0.3)
 
     ax2.set_xlabel("Epoch / Round")
-    ax2.set_ylabel("Training Loss (MSE)")
-    ax2.set_title("Training Loss Convergence", fontweight="bold")
+    ax2.set_ylabel("Training RMSE")
+    ax2.set_title("Training RMSE Convergence", fontweight="bold")
     ax2.legend(fontsize=8)
     ax2.grid(alpha=0.3)
 
