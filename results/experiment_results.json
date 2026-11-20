@@ -1,0 +1,871 @@
+{
+  "local_training": {
+    "rsu_1": {
+      "final_train_loss": 0.10104944551444692,
+      "final_val_loss": 0.07906756381652205,
+      "elapsed_seconds": 209.2
+    },
+    "rsu_2": {
+      "final_train_loss": 0.0949981406395422,
+      "final_val_loss": 0.08322366884480377,
+      "elapsed_seconds": 225.7
+    },
+    "rsu_3": {
+      "final_train_loss": 0.09426930684823422,
+      "final_val_loss": 0.09322425097060685,
+      "elapsed_seconds": 169.9
+    }
+  },
+  "federated_training": {
+    "elapsed_seconds": 1243.3,
+    "num_rounds": 10,
+    "round_train_loss": [
+      0.12826815630655036,
+      0.10461277910190954,
+      0.10136942000256391,
+      0.09974828850397882,
+      0.09862824148867165,
+      0.09760681819860602,
+      0.09667454287536072,
+      0.09609785692373668,
+      0.09534869999160075,
+      0.09463239210645029
+    ],
+    "round_val_loss": [
+      0.0881735817211767,
+      0.08609554671264963,
+      0.08611284310511924,
+      0.08439128159733161,
+      0.08334724305340456,
+      0.08419382561704183,
+      0.0823016124654755,
+      0.0818848613514443,
+      0.08311326755020813,
+      0.08216743391045345
+    ]
+  },
+  "centralized_training": {
+    "final_train_loss": 0.09465895963390798,
+    "final_val_loss": 0.08116269844674133,
+    "elapsed_seconds": 586.7,
+    "total_train_samples": 2813941
+  },
+  "evaluation": {
+    "local_own_zone": {
+      "rsu_1": {
+        "checkpoint_path": "models\\local\\local_rsu_1.pt",
+        "training_mode": "local",
+        "rsu_id": "rsu_1",
+        "num_test_samples": 222304,
+        "position_rmse": [
+          4.815824508666992,
+          4.860319137573242,
+          4.674511432647705
+        ],
+        "speed_rmse": [
+          0.12396897375583649,
+          0.21654681861400604,
+          0.342979371547699
+        ],
+        "per_feature_rmse": [
+          [
+            0.07982050627470016,
+            4.81516695022583,
+            0.12396897375583649,
+            0.08085853606462479
+          ],
+          [
+            0.0836179107427597,
+            4.859609127044678,
+            0.21654681861400604,
+            0.09113804996013641
+          ],
+          [
+            0.08819933235645294,
+            4.673699378967285,
+            0.342979371547699,
+            0.09636636078357697
+          ]
+        ],
+        "metadata": {
+          "training_mode": "local",
+          "rsu_id": "rsu_1",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 42,
+          "elapsed_seconds": 209.2
+        }
+      },
+      "rsu_2": {
+        "checkpoint_path": "models\\local\\local_rsu_2.pt",
+        "training_mode": "local",
+        "rsu_id": "rsu_2",
+        "num_test_samples": 213852,
+        "position_rmse": [
+          2.689030170440674,
+          2.7560036182403564,
+          2.662238121032715
+        ],
+        "speed_rmse": [
+          0.12127803266048431,
+          0.2007225751876831,
+          0.32709747552871704
+        ],
+        "per_feature_rmse": [
+          [
+            0.08994562178850174,
+            2.687528133392334,
+            0.12127803266048431,
+            0.06385558843612671
+          ],
+          [
+            0.09710482507944107,
+            2.7542996406555176,
+            0.2007225751876831,
+            0.07361617684364319
+          ],
+          [
+            0.09969133138656616,
+            2.6603848934173584,
+            0.32709747552871704,
+            0.07942112535238266
+          ]
+        ],
+        "metadata": {
+          "training_mode": "local",
+          "rsu_id": "rsu_2",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 43,
+          "elapsed_seconds": 225.7
+        }
+      },
+      "rsu_3": {
+        "checkpoint_path": "models\\local\\local_rsu_3.pt",
+        "training_mode": "local",
+        "rsu_id": "rsu_3",
+        "num_test_samples": 163651,
+        "position_rmse": [
+          3.5556411743164062,
+          3.3326470851898193,
+          3.328076124191284
+        ],
+        "speed_rmse": [
+          0.15735523402690887,
+          0.23242491483688354,
+          0.3650266230106354
+        ],
+        "per_feature_rmse": [
+          [
+            0.08323423564434052,
+            3.5546603202819824,
+            0.15735523402690887,
+            0.059329114854335785
+          ],
+          [
+            0.08867064118385315,
+            3.331484317779541,
+            0.23242491483688354,
+            0.0680462121963501
+          ],
+          [
+            0.10077567398548126,
+            3.3265609741210938,
+            0.3650266230106354,
+            0.07175148278474808
+          ]
+        ],
+        "metadata": {
+          "training_mode": "local",
+          "rsu_id": "rsu_3",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 44,
+          "elapsed_seconds": 169.9
+        }
+      }
+    },
+    "local_all_zones": {
+      "rsu_1": {
+        "checkpoint_path": "models\\local\\local_rsu_1.pt",
+        "training_mode": "local",
+        "rsu_id": "all",
+        "num_test_samples": 599807,
+        "position_rmse": [
+          91.08435821533203,
+          87.88587951660156,
+          89.18498992919922
+        ],
+        "speed_rmse": [
+          1.0764814615249634,
+          1.3667488098144531,
+          1.450073480606079
+        ],
+        "per_feature_rmse": [
+          [
+            2.128110647201538,
+            91.05944061279297,
+            1.0764814615249634,
+            0.085700124502182
+          ],
+          [
+            2.241497755050659,
+            87.85750579833984,
+            1.3667488098144531,
+            0.1187048852443695
+          ],
+          [
+            2.110078811645508,
+            89.16000366210938,
+            1.450073480606079,
+            0.11764611303806305
+          ]
+        ],
+        "metadata": {
+          "training_mode": "local",
+          "rsu_id": "rsu_1",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 42,
+          "elapsed_seconds": 209.2
+        }
+      },
+      "rsu_2": {
+        "checkpoint_path": "models\\local\\local_rsu_2.pt",
+        "training_mode": "local",
+        "rsu_id": "all",
+        "num_test_samples": 599807,
+        "position_rmse": [
+          18.649080276489258,
+          17.187644958496094,
+          19.277244567871094
+        ],
+        "speed_rmse": [
+          0.17934633791446686,
+          0.3323485851287842,
+          0.41271141171455383
+        ],
+        "per_feature_rmse": [
+          [
+            0.24006769061088562,
+            18.647510528564453,
+            0.17934633791446686,
+            0.07071056962013245
+          ],
+          [
+            0.2926725149154663,
+            17.185197830200195,
+            0.3323485851287842,
+            0.08159779012203217
+          ],
+          [
+            0.29869750142097473,
+            19.274980545043945,
+            0.41271141171455383,
+            0.08702900260686874
+          ]
+        ],
+        "metadata": {
+          "training_mode": "local",
+          "rsu_id": "rsu_2",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 43,
+          "elapsed_seconds": 225.7
+        }
+      },
+      "rsu_3": {
+        "checkpoint_path": "models\\local\\local_rsu_3.pt",
+        "training_mode": "local",
+        "rsu_id": "all",
+        "num_test_samples": 599807,
+        "position_rmse": [
+          118.76280975341797,
+          114.79602813720703,
+          103.487060546875
+        ],
+        "speed_rmse": [
+          1.2363313436508179,
+          1.0897533893585205,
+          1.2874990701675415
+        ],
+        "per_feature_rmse": [
+          [
+            1.7113810777664185,
+            118.75023651123047,
+            1.2363313436508179,
+            0.07628516852855682
+          ],
+          [
+            1.5527094602584839,
+            114.78564453125,
+            1.0897533893585205,
+            0.08461787551641464
+          ],
+          [
+            1.7611995935440063,
+            103.47241973876953,
+            1.2874990701675415,
+            0.08913054317235947
+          ]
+        ],
+        "metadata": {
+          "training_mode": "local",
+          "rsu_id": "rsu_3",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 44,
+          "elapsed_seconds": 169.9
+        }
+      }
+    },
+    "federated_per_rsu": {
+      "rsu_1": {
+        "checkpoint_path": "models\\fedavg_global.pt",
+        "training_mode": "federated",
+        "rsu_id": "rsu_1",
+        "num_test_samples": 222304,
+        "position_rmse": [
+          6.989250183105469,
+          7.196561813354492,
+          7.203365325927734
+        ],
+        "speed_rmse": [
+          0.15753300487995148,
+          0.22150947153568268,
+          0.3501902222633362
+        ],
+        "per_feature_rmse": [
+          [
+            0.4171479046344757,
+            6.976874828338623,
+            0.15753300487995148,
+            0.07987801730632782
+          ],
+          [
+            0.40626266598701477,
+            7.185139179229736,
+            0.22150947153568268,
+            0.09156789630651474
+          ],
+          [
+            0.4039354920387268,
+            7.192018508911133,
+            0.3501902222633362,
+            0.09637480974197388
+          ]
+        ],
+        "metadata": {
+          "training_mode": "federated",
+          "strategy": "FedAvg",
+          "num_rounds": 10,
+          "local_epochs": 1,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "num_clients": 3,
+          "rsu_ids": [
+            "rsu_1",
+            "rsu_2",
+            "rsu_3"
+          ],
+          "seed": 42,
+          "elapsed_seconds": 1238.9,
+          "implementation": "manual_in_process"
+        }
+      },
+      "rsu_2": {
+        "checkpoint_path": "models\\fedavg_global.pt",
+        "training_mode": "federated",
+        "rsu_id": "rsu_2",
+        "num_test_samples": 213852,
+        "position_rmse": [
+          9.51999568939209,
+          9.62549877166748,
+          9.442427635192871
+        ],
+        "speed_rmse": [
+          0.11668486148118973,
+          0.18393592536449432,
+          0.30138593912124634
+        ],
+        "per_feature_rmse": [
+          [
+            0.12605203688144684,
+            9.519211769104004,
+            0.11668486148118973,
+            0.06262614578008652
+          ],
+          [
+            0.12098906189203262,
+            9.624749183654785,
+            0.18393592536449432,
+            0.0732705146074295
+          ],
+          [
+            0.12238970398902893,
+            9.441659927368164,
+            0.30138593912124634,
+            0.07936117053031921
+          ]
+        ],
+        "metadata": {
+          "training_mode": "federated",
+          "strategy": "FedAvg",
+          "num_rounds": 10,
+          "local_epochs": 1,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "num_clients": 3,
+          "rsu_ids": [
+            "rsu_1",
+            "rsu_2",
+            "rsu_3"
+          ],
+          "seed": 42,
+          "elapsed_seconds": 1238.9,
+          "implementation": "manual_in_process"
+        }
+      },
+      "rsu_3": {
+        "checkpoint_path": "models\\fedavg_global.pt",
+        "training_mode": "federated",
+        "rsu_id": "rsu_3",
+        "num_test_samples": 163651,
+        "position_rmse": [
+          36.272979736328125,
+          37.0120964050293,
+          36.512454986572266
+        ],
+        "speed_rmse": [
+          0.195529967546463,
+          0.22869551181793213,
+          0.37191241979599
+        ],
+        "per_feature_rmse": [
+          [
+            0.26699668169021606,
+            36.27204132080078,
+            0.195529967546463,
+            0.05504314601421356
+          ],
+          [
+            0.20977623760700226,
+            37.011497497558594,
+            0.22869551181793213,
+            0.06581004709005356
+          ],
+          [
+            0.1899750977754593,
+            36.51190185546875,
+            0.37191241979599,
+            0.07356911152601242
+          ]
+        ],
+        "metadata": {
+          "training_mode": "federated",
+          "strategy": "FedAvg",
+          "num_rounds": 10,
+          "local_epochs": 1,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "num_clients": 3,
+          "rsu_ids": [
+            "rsu_1",
+            "rsu_2",
+            "rsu_3"
+          ],
+          "seed": 42,
+          "elapsed_seconds": 1238.9,
+          "implementation": "manual_in_process"
+        }
+      }
+    },
+    "federated_all": {
+      "checkpoint_path": "models\\fedavg_global.pt",
+      "training_mode": "federated",
+      "rsu_id": "all",
+      "num_test_samples": 599807,
+      "position_rmse": [
+        20.233673095703125,
+        20.63943099975586,
+        20.365543365478516
+      ],
+      "speed_rmse": [
+        0.15645869076251984,
+        0.2109619379043579,
+        0.3399115204811096
+      ],
+      "per_feature_rmse": [
+        [
+          0.29927071928977966,
+          20.23149871826172,
+          0.15645869076251984,
+          0.06769707053899765
+        ],
+        [
+          0.2799038887023926,
+          20.63753890991211,
+          0.2109619379043579,
+          0.0787176862359047
+        ],
+        [
+          0.27496594190597534,
+          20.363698959350586,
+          0.3399115204811096,
+          0.0846090316772461
+        ]
+      ],
+      "metadata": {
+        "training_mode": "federated",
+        "strategy": "FedAvg",
+        "num_rounds": 10,
+        "local_epochs": 1,
+        "batch_size": 512,
+        "learning_rate": 0.001,
+        "num_clients": 3,
+        "rsu_ids": [
+          "rsu_1",
+          "rsu_2",
+          "rsu_3"
+        ],
+        "seed": 42,
+        "elapsed_seconds": 1238.9,
+        "implementation": "manual_in_process"
+      }
+    },
+    "centralized_per_rsu": {
+      "rsu_1": {
+        "checkpoint_path": "models\\centralized_global.pt",
+        "training_mode": "centralized",
+        "rsu_id": "rsu_1",
+        "num_test_samples": 222304,
+        "position_rmse": [
+          2.828618049621582,
+          2.830960988998413,
+          2.844583034515381
+        ],
+        "speed_rmse": [
+          0.10438764840364456,
+          0.1892610788345337,
+          0.3179822564125061
+        ],
+        "per_feature_rmse": [
+          [
+            0.10429689288139343,
+            2.8267102241516113,
+            0.10438764840364456,
+            0.0795956552028656
+          ],
+          [
+            0.10580793023109436,
+            2.828995704650879,
+            0.1892610788345337,
+            0.08997820317745209
+          ],
+          [
+            0.10887458920478821,
+            2.8425161838531494,
+            0.3179822564125061,
+            0.0949275866150856
+          ]
+        ],
+        "metadata": {
+          "training_mode": "centralized",
+          "privacy_note": "PRIVACY-UNSAFE: all raw data pooled at central server",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 42,
+          "total_train_samples": 2813941,
+          "total_val_samples": 594563,
+          "elapsed_seconds": 586.7
+        }
+      },
+      "rsu_2": {
+        "checkpoint_path": "models\\centralized_global.pt",
+        "training_mode": "centralized",
+        "rsu_id": "rsu_2",
+        "num_test_samples": 213852,
+        "position_rmse": [
+          2.3870508670806885,
+          2.3895263671875,
+          2.38451886177063
+        ],
+        "speed_rmse": [
+          0.0961068794131279,
+          0.15990959107875824,
+          0.28092584013938904
+        ],
+        "per_feature_rmse": [
+          [
+            0.09093354642391205,
+            2.3853461742401123,
+            0.0961068794131279,
+            0.06242864578962326
+          ],
+          [
+            0.09199953079223633,
+            2.387763261795044,
+            0.15990959107875824,
+            0.07321600615978241
+          ],
+          [
+            0.09573772549629211,
+            2.382598876953125,
+            0.28092584013938904,
+            0.07862600684165955
+          ]
+        ],
+        "metadata": {
+          "training_mode": "centralized",
+          "privacy_note": "PRIVACY-UNSAFE: all raw data pooled at central server",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 42,
+          "total_train_samples": 2813941,
+          "total_val_samples": 594563,
+          "elapsed_seconds": 586.7
+        }
+      },
+      "rsu_3": {
+        "checkpoint_path": "models\\centralized_global.pt",
+        "training_mode": "centralized",
+        "rsu_id": "rsu_3",
+        "num_test_samples": 163651,
+        "position_rmse": [
+          2.556236982345581,
+          2.5556280612945557,
+          2.561065673828125
+        ],
+        "speed_rmse": [
+          0.1171102523803711,
+          0.18984900414943695,
+          0.31942984461784363
+        ],
+        "per_feature_rmse": [
+          [
+            0.08423835784196854,
+            2.554844856262207,
+            0.1171102523803711,
+            0.05485772341489792
+          ],
+          [
+            0.0861789882183075,
+            2.554180860519409,
+            0.18984900414943695,
+            0.06529039144515991
+          ],
+          [
+            0.0923740342259407,
+            2.5593860149383545,
+            0.31942984461784363,
+            0.07038486748933792
+          ]
+        ],
+        "metadata": {
+          "training_mode": "centralized",
+          "privacy_note": "PRIVACY-UNSAFE: all raw data pooled at central server",
+          "epochs": 5,
+          "batch_size": 512,
+          "learning_rate": 0.001,
+          "seed": 42,
+          "total_train_samples": 2813941,
+          "total_val_samples": 594563,
+          "elapsed_seconds": 586.7
+        }
+      }
+    },
+    "centralized_all": {
+      "checkpoint_path": "models\\centralized_global.pt",
+      "training_mode": "centralized",
+      "rsu_id": "all",
+      "num_test_samples": 599807,
+      "position_rmse": [
+        2.603271484375,
+        2.6048693656921387,
+        2.610183000564575
+      ],
+      "speed_rmse": [
+        0.10522101819515228,
+        0.17948918044567108,
+        0.30564188957214355
+      ],
+      "per_feature_rmse": [
+        [
+          0.0944061428308487,
+          2.6015801429748535,
+          0.10522101819515228,
+          0.06747844815254211
+        ],
+        [
+          0.09586413204669952,
+          2.6031317710876465,
+          0.17948918044567108,
+          0.07790488749742508
+        ],
+        [
+          0.09992902725934982,
+          2.6083061695098877,
+          0.30564188957214355,
+          0.08300196379423141
+        ]
+      ],
+      "metadata": {
+        "training_mode": "centralized",
+        "privacy_note": "PRIVACY-UNSAFE: all raw data pooled at central server",
+        "epochs": 5,
+        "batch_size": 512,
+        "learning_rate": 0.001,
+        "seed": 42,
+        "total_train_samples": 2813941,
+        "total_val_samples": 594563,
+        "elapsed_seconds": 586.7
+      }
+    }
+  },
+  "gap_experiment": {
+    "gap_steps_evaluated": 3,
+    "gap_duration_ms": 300,
+    "num_test_samples": 599807,
+    "freeze_position_rmse_per_step": [
+      1.0198242664337158,
+      2.0402424335479736,
+      3.0612173080444336
+    ],
+    "model_position_rmse_per_step": [
+      2.6039481163024902,
+      2.605537176132202,
+      2.610852003097534
+    ],
+    "freeze_speed_rmse_per_step": [
+      0.16172674298286438,
+      0.31144270300865173,
+      0.44194716215133667
+    ],
+    "model_speed_rmse_per_step": [
+      0.10523465275764465,
+      0.17952404916286469,
+      0.3057120144367218
+    ],
+    "freeze_overall_position_rmse": 2.2040629386901855,
+    "model_overall_position_rmse": 2.606780767440796,
+    "position_rmse_improvement_pct": -18.27
+  },
+  "weight_update_size": {
+    "total_parameters": 18380,
+    "bytes_per_update": 73520,
+    "kb_per_update": 71.8,
+    "upload_per_round_kb": 71.8,
+    "download_per_round_kb": 71.8,
+    "total_per_round_per_client_kb": 143.59,
+    "dtype": "float32",
+    "model_config": {
+      "input_size": 4,
+      "hidden_size": 64,
+      "prediction_steps": 3,
+      "num_layers": 1
+    }
+  },
+  "inference_latency": {
+    "mean_ms": 0.4899260000001959,
+    "std_ms": 0.14322352016239234,
+    "min_ms": 0.322599998980877,
+    "max_ms": 1.0925999995379243,
+    "warmup_runs": 50,
+    "timed_runs": 200
+  },
+  "gap_experiment_all_models": {
+    "centralized": {
+      "gap_steps_evaluated": 3,
+      "gap_duration_ms": 300,
+      "num_test_samples": 599807,
+      "freeze_position_rmse_per_step": [
+        1.0198242664337158,
+        2.0402424335479736,
+        3.0612173080444336
+      ],
+      "model_position_rmse_per_step": [
+        2.6039481163024902,
+        2.605537176132202,
+        2.610852003097534
+      ],
+      "freeze_speed_rmse_per_step": [
+        0.16172674298286438,
+        0.31144270300865173,
+        0.44194716215133667
+      ],
+      "model_speed_rmse_per_step": [
+        0.10523465275764465,
+        0.17952404916286469,
+        0.3057120144367218
+      ],
+      "freeze_overall_position_rmse": 2.2040629386901855,
+      "model_overall_position_rmse": 2.606780767440796,
+      "position_rmse_improvement_pct": -18.27
+    },
+    "federated": {
+      "gap_steps_evaluated": 3,
+      "gap_duration_ms": 300,
+      "num_test_samples": 599807,
+      "freeze_position_rmse_per_step": [
+        1.0198242664337158,
+        2.0402424335479736,
+        3.0612173080444336
+      ],
+      "model_position_rmse_per_step": [
+        20.2338809967041,
+        20.63963508605957,
+        20.365873336791992
+      ],
+      "freeze_speed_rmse_per_step": [
+        0.16172674298286438,
+        0.31144270300865173,
+        0.44194716215133667
+      ],
+      "model_speed_rmse_per_step": [
+        0.15647494792938232,
+        0.2109997570514679,
+        0.3399784564971924
+      ],
+      "freeze_overall_position_rmse": 2.2040629386901855,
+      "model_overall_position_rmse": 20.413829803466797,
+      "position_rmse_improvement_pct": -826.19
+    },
+    "local_rsu_2": {
+      "gap_steps_evaluated": 3,
+      "gap_duration_ms": 300,
+      "num_test_samples": 599807,
+      "freeze_position_rmse_per_step": [
+        1.0198242664337158,
+        2.0402424335479736,
+        3.0612173080444336
+      ],
+      "model_position_rmse_per_step": [
+        18.661413192749023,
+        17.196212768554688,
+        19.28778648376465
+      ],
+      "freeze_speed_rmse_per_step": [
+        0.16172674298286438,
+        0.31144270300865173,
+        0.44194716215133667
+      ],
+      "model_speed_rmse_per_step": [
+        0.17937730252742767,
+        0.332444965839386,
+        0.412824422121048
+      ],
+      "freeze_overall_position_rmse": 2.2040629386901855,
+      "model_overall_position_rmse": 18.402687072753906,
+      "position_rmse_improvement_pct": -734.94
+    }
+  },
+  "gap_experiment_best_model": "centralized"
+}
