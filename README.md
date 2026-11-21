@@ -14,7 +14,7 @@ In Digital Twin-assisted Vehicular Edge Computing (DT-VEC), each RSU maintains a
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Base Station (Aggregator)                 │
+│                    Base Station (Aggregator)                │
 │                     FedAvg Strategy                         │
 │              Aggregates weight updates only                 │
 └───────┬──────────────┬──────────────┬───────────────────────┘
@@ -85,28 +85,28 @@ python -m unittest discover -s tests -v
 CC-project/
 ├── src/
 │   ├── __init__.py
-│   ├── preprocessing.py        # Person 1: NGSIM data pipeline, RSU partitioning
-│   ├── model.py                # Person 2: GRU model architecture
-│   ├── train_utils.py          # Person 2: Training/eval utilities, normalization
-│   ├── predictor.py            # Person 2: Inference API (RSUStatePredictor)
-│   ├── rsu_client.py           # Person 3: Flower RSU client wrapper
-│   ├── base_station.py         # Person 3: FedAvg aggregation strategy
-│   ├── federated_training.py   # Person 3: Federated training orchestration (Flower)
-│   ├── federated_manual.py     # Integration: Manual FedAvg (no ray dependency)
-│   ├── local_training.py       # Person 4: Local-only baseline training
-│   ├── centralized_training.py # Person 4: Centralized baseline (privacy-unsafe)
-│   └── checkpoints.py          # Person 4: Evaluation and comparison utilities
+│   ├── preprocessing.py        
+│   ├── model.py                
+│   ├── train_utils.py          
+│   ├── predictor.py            
+│   ├── rsu_client.py           
+│   ├── base_station.py         
+│   ├── federated_training.py   
+│   ├── federated_manual.py     
+│   ├── local_training.py       
+│   ├── centralized_training.py 
+│   └── checkpoints.py          
 ├── tests/
-│   ├── test_preprocessing.py   # Person 1 tests
-│   ├── test_model.py           # Person 2 tests
-│   ├── test_federated.py       # Person 3 tests
-│   └── test_local_centralized.py # Person 4 tests
+│   ├── test_preprocessing.py   
+│   ├── test_model.py           
+│   ├── test_federated.py       
+│   └── test_local_centralized.py 
 ├── docs/
-│   └── DATASET.md              # Dataset documentation and provenance
-├── run_experiments.py          # Full experiment pipeline
-├── generate_plots.py           # Plot generation
-├── requirements.txt            # Python dependencies
-└── README.md                   # This file
+│   └── DATASET.md              
+├── run_experiments.py          
+├── generate_plots.py           
+├── requirements.txt            
+└── README.md                   
 ```
 
 ## Technical Details
@@ -135,9 +135,9 @@ CC-project/
 
 | Regime | Description | Privacy |
 |--------|-------------|---------|
-| **Local-only** | Each RSU trains independently on its own data | ✅ Private |
+| **Local-only** | Each RSU trains independently on its own data | Private |
 | **FedAvg** | Each RSU child process loads only its partition and sends model updates to the Base Station | Raw arrays remain in each worker; same-host OS isolation is limited |
-| **Centralized** | All data pooled at one server | ❌ Unsafe |
+| **Centralized** | All data pooled at one server |  Unsafe |
 
 ### Evaluation Metrics
 
@@ -257,24 +257,7 @@ Across the full gap, FedAvg reduces position error substantially compared with f
 
 The FedAvg coordinator receives model parameters and scalar metrics from three separate RSU child processes; raw training and validation arrays remain in each worker. The processes share one host and OS account, so this simulation does not provide hardened filesystem isolation. The centralized baseline is intentionally privacy-unsafe.
 
-## Limitations
 
-- Heading is estimated from position displacement (no sensor heading available)
-- Heading is treated as a raw radian value (no wraparound handling at ±π)
-- NGSIM data has known measurement noise in position values
-- FedAvg is standard averaging without formal differential privacy guarantees
-- Recursive prediction beyond 3 steps can accumulate error; report the measured five-step result with its evaluation setup
-- RSU clients run in separate child processes, but share the host OS account and filesystem permissions; use separate machines or hardened containers and access controls for deployment isolation
-- Evaluated on CPU only (no GPU benchmarks)
-
-## Team Contributions
-
-| Person | Responsibility | Key Files |
-|--------|---------------|-----------|
-| Person 1 | Dataset pipeline & RSU partitioning | `preprocessing.py`, `test_preprocessing.py` |
-| Person 2 | GRU model, training utils, inference API | `model.py`, `train_utils.py`, `predictor.py` |
-| Person 3 | Federated learning orchestration | `rsu_client.py`, `base_station.py`, `federated_training.py` |
-| Person 4 | Baselines, evaluation & integration | `local_training.py`, `centralized_training.py`, `checkpoints.py` |
 
 ## References
 
