@@ -8,7 +8,7 @@ A complete implementation of RSU-federated vehicle state prediction using GRU ne
 
 In Digital Twin-assisted Vehicular Edge Computing (DT-VEC), each RSU maintains a virtual replica of vehicles in its zone. When telemetry gaps occur (due to wireless volatility or bandwidth constraints), the digital twin becomes stale. This project deploys a GRU-based prediction model at each RSU that forecasts vehicle states (position, speed, heading) during these gaps.
 
-**Key Innovation**: Federated Learning allows RSUs to collaboratively improve their models by sharing only weight updates — raw trajectory data never leaves an RSU's coverage zone.
+**Key Innovation**: Each RSU client trains on its own partition. The GRU predicts position displacement from the last observed state, reducing the effect of different absolute road coordinates across RSUs. Flower FedAvg aggregates model updates using fixed, public physical scales rather than pooled normalization statistics. Each simulated RSU runs in a separate child process, loads only its assigned partition, and returns model parameters and scalar metrics to the coordinator. The centralized baseline remains privacy-unsafe. This is a same-host process simulation, not hardened OS-level isolation or a deployment security guarantee.
 
 ### Architecture
 
@@ -51,7 +51,7 @@ python -c "import zipfile; zipfile.ZipFile('processed data.zip').extractall('ext
 ### Run All Experiments
 
 ```bash
-python run_experiments.py --data-dir data/rsu --epochs 10 --rounds 20 --batch-size 512
+python run_experiments.py --data-dir data/rsu --epochs 10 --rounds 20 --batch-size 1024
 ```
 
 ### Run Individual Training Modes
@@ -85,28 +85,28 @@ python -m unittest discover -s tests -v
 CC-project/
 ├── src/
 │   ├── __init__.py
-│   ├── preprocessing.py        
-│   ├── model.py                
-│   ├── train_utils.py          
-│   ├── predictor.py            
-│   ├── rsu_client.py           
-│   ├── base_station.py         
-│   ├── federated_training.py   
-│   ├── federated_manual.py     
-│   ├── local_training.py       
-│   ├── centralized_training.py 
-│   └── checkpoints.py          
+│   ├── preprocessing.py        # Person 1: NGSIM data pipeline, RSU partitioning
+│   ├── model.py                # Person 2: GRU model architecture
+│   ├── train_utils.py          # Person 2: Training/eval utilities, normalization
+│   ├── predictor.py            # Person 2: Inference API (RSUStatePredictor)
+│   ├── rsu_client.py           # Person 3: Flower RSU client wrapper
+│   ├── base_station.py         # Person 3: FedAvg aggregation strategy
+│   ├── federated_training.py   # Person 3: Federated training orchestration (Flower)
+│   ├── federated_manual.py     # Integration: Manual FedAvg (no ray dependency)
+│   ├── local_training.py       # Person 4: Local-only baseline training
+│   ├── centralized_training.py # Person 4: Centralized baseline (privacy-unsafe)
+│   └── checkpoints.py          # Person 4: Evaluation and comparison utilities
 ├── tests/
-│   ├── test_preprocessing.py  
-│   ├── test_model.py           
-│   ├── test_federated.py      
-│   └── test_local_centralized.py 
+│   ├── test_preprocessing.py   # Person 1 tests
+│   ├── test_model.py           # Person 2 tests
+│   ├── test_federated.py       # Person 3 tests
+│   └── test_local_centralized.py # Person 4 tests
 ├── docs/
-│   └── DATASET.md              
-├── run_experiments.py          
-├── generate_plots.py           
-├── requirements.txt           
-└── README.md                   
+│   └── DATASET.md              # Dataset documentation and provenance
+├── run_experiments.py          # Full experiment pipeline
+├── generate_plots.py           # Plot generation
+├── requirements.txt            # Python dependencies
+└── README.md                   # This file
 ```
 
 ## Technical Details
@@ -117,8 +117,9 @@ CC-project/
 - **Input**: `[B, 5, 4]` — 5 timesteps × 4 features (x_m, y_m, speed_mps, heading_rad)
 - **Output**: `[B, 3, 4]` — 3 predicted future timesteps × 4 features
 - **Hidden size**: 64
-- **Parameters**: ~30K (lightweight for edge deployment)
-- **Loss**: MSE on normalized features
+- **Parameters**: 18,380 (lightweight for edge deployment)
+- **Position encoding**: input and target positions are relative to the last observed position; the inference API restores absolute coordinates
+- **Loss**: MSE on features normalized with fixed physical scales; scales are not computed by pooling RSU samples
 
 ### Dataset
 
@@ -134,9 +135,9 @@ CC-project/
 
 | Regime | Description | Privacy |
 |--------|-------------|---------|
-| **Local-only** | Each RSU trains independently on its own data |  Private |
-| **FedAvg** | RSUs share weight updates via Base Station |  Private |
-| **Centralized** | All data pooled at one server |  Unsafe |
+| **Local-only** | Each RSU trains independently on its own data | ✅ Private |
+| **FedAvg** | Each RSU child process loads only its partition and sends model updates to the Base Station | Raw arrays remain in each worker; same-host OS isolation is limited |
+| **Centralized** | All data pooled at one server | ❌ Unsafe |
 
 ### Evaluation Metrics
 
@@ -176,44 +177,85 @@ future_5 = predictor.predict_recursive(history, total_steps=5)  # [5, 4]
 
 ## Experimental Results
 
-### Position RMSE (meters) on Test Data
+### Run configuration
 
-| Model | K=1 (100ms) | K=2 (200ms) | K=3 (300ms) |
-|-------|-------------|-------------|-------------|
-| Local-only (avg, own zone) | 3.69 | 3.65 | 3.55 |
-| FedAvg (all zones) | 12.85 | 11.75 | 10.93 |
-| Centralized (all zones) | **4.91** | **5.10** | **4.98** |
+The reported run uses NGSIM US-101, vehicle-disjoint train/validation/test partitions, a 64-unit GRU, relative-position encoding, and fixed public physical scales. Local-only and centralized models train for 10 epochs. FedAvg runs 20 rounds with one local epoch per RSU per round. Batch size is 1,024 and seed is 42. The centralized baseline uses all 2,813,941 training windows. Test RMSE is reported in physical units.
 
-### Speed RMSE (m/s) on Test Data
+### Test prediction accuracy
 
-| Model | K=1 (100ms) | K=2 (200ms) | K=3 (300ms) |
-|-------|-------------|-------------|-------------|
-| Local-only (avg, own zone) | 0.134 | 0.217 | 0.345 |
-| FedAvg (all zones) | 0.191 | 0.243 | 0.378 |
-| Centralized (all zones) | **0.136** | **0.256** | **0.390** |
+#### Position RMSE (meters)
 
-### 500 ms Telemetry Gap Experiment (Centralized Model)
+| Training regime | K=1 (100 ms) | K=2 (200 ms) | K=3 (300 ms) |
+|-----------------|--------------:|--------------:|--------------:|
+| Local-only (mean across own RSU zones) | 0.0199 | 0.0345 | 0.0599 |
+| FedAvg (all RSUs) | 0.0141 | 0.0305 | 0.0526 |
+| Centralized (pooled reference) | **0.0130** | **0.0289** | **0.0486** |
 
-| Step | Freeze Position / Speed | Model Position / Speed | Speed Improvement |
-|------|-------------------------|------------------------|-------------------|
-| 100ms | 1.02 m / 0.162 m/s | 4.91 m / 0.136 m/s | — / **15.8%** |
-| 200ms | 2.04 m / 0.311 m/s | 5.10 m / 0.257 m/s | — / **17.6%** |
-| 300ms | 3.06 m / 0.442 m/s | 4.98 m / 0.390 m/s | — / **11.8%** |
+#### Speed RMSE (m/s)
 
-> **Key Finding**: The GRU model achieves **12–18% speed prediction improvement** over the freeze baseline across all horizons. Position RMSE is higher because the model inherits a constant offset from the NGSIM dataset's non-IID spatial distribution (absolute y-coordinates span 0–682m across RSU zones); the freeze baseline benefits from spatial locality at short horizons but its error grows linearly (1→2→3m) while the model error remains flat (~5m), meaning the model outperforms freeze for gaps beyond ~500ms.
+| Training regime | K=1 (100 ms) | K=2 (200 ms) | K=3 (300 ms) |
+|-----------------|--------------:|--------------:|--------------:|
+| Local-only (mean across own RSU zones) | 0.0788 | 0.1838 | 0.3226 |
+| FedAvg (all RSUs) | 0.0624 | 0.1562 | 0.2865 |
+| Centralized (pooled reference) | **0.0572** | **0.1472** | **0.2740** |
 
-### Infrastructure Metrics
+The FedAvg values above are from the final process-isolated checkpoint. Each regime is evaluated on the same vehicle-disjoint test split. The position and speed comparison figures are in `results/plots/position_rmse_comparison.png` and `results/plots/speed_rmse_comparison.png`.
 
-| Metric | Value |
-|--------|-------|
-| Model parameters | 18,380 |
-| Weight update per FL round | 71.8 KB |
-| FedAvg rounds | 20 |
-| Inference latency (CPU) | 1.15 ± 0.23 ms |
+### Full 500 ms telemetry-gap evaluation
 
-### Discussion
+The predictor produces five future states recursively: it predicts the first three steps, then feeds predictions back to forecast steps four and five. Freeze means the RSU holds the last observed state at every future step. Ground truth is joined by recording, vehicle, timestamp, RSU, and test split. The FedAvg and centralized models each have 594,371 eligible test windows; each local model uses only its own RSU zone.
 
-The FedAvg model shows higher position RMSE when evaluated across all zones because NGSIM RSU partitions have significantly different absolute y-coordinates (0–227m, 227–454m, 454–682m), creating a non-IID data distribution. This is a well-known challenge in Federated Learning. Critically, FedAvg achieves **competitive speed RMSE** (0.191 m/s vs centralized's 0.136 m/s at K=1), demonstrating that the model learns valid motion dynamics despite data heterogeneity. Local models catastrophically fail when evaluated on other zones (91m+ RMSE for RSU-1 on all zones), while FedAvg reduces this to 12.9m — a **7× improvement in cross-zone generalization**. The centralized baseline (privacy-unsafe) serves as the upper bound.
+| Horizon | Freeze position RMSE | FedAvg position RMSE | Freeze speed RMSE | FedAvg speed RMSE |
+|---------|---------------------:|---------------------:|------------------:|------------------:|
+| 100 ms | 1.017 m | 0.014 m | 0.162 m/s | 0.062 m/s |
+| 200 ms | 2.035 m | 0.030 m | 0.312 m/s | 0.156 m/s |
+| 300 ms | 3.053 m | 0.052 m | 0.443 m/s | 0.287 m/s |
+| 400 ms | 4.072 m | 0.088 m | 0.552 m/s | 0.429 m/s |
+| 500 ms (K=5) | 5.092 m | 0.138 m | 0.642 m/s | 0.550 m/s |
+
+At the 500 ms endpoint, FedAvg position RMSE is 0.138 m compared with 5.092 m for freeze, a **97.30% reduction**. The five-horizon aggregate RMSE is 0.078 m for FedAvg and 3.377 m for freeze, a **97.68% reduction**. The aggregate is calculated across all five forecast steps and is distinct from the K=5 endpoint.
+
+| Model evaluated over its eligible RSU test windows | Eligible windows | Position RMSE at 500 ms | Aggregate position RMSE across five steps |
+|-----------------------------------------------------|-----------------:|-------------------------:|-------------------------------------------:|
+| FedAvg | 594,371 | 0.138 m | 0.078 m |
+| Centralized | 594,371 | 0.133 m | 0.075 m |
+| Local RSU 1 | 220,468 | 0.143 m | 0.083 m |
+| Local RSU 2 | 212,016 | 0.141 m | 0.081 m |
+| Local RSU 3 | 161,887 | 0.174 m | 0.100 m |
+
+The per-model table reports both the actual 500 ms endpoint and the aggregate over the five horizons. The corresponding figures are `results/plots/gap_experiment.png` and `results/plots/gap_experiment_all_models.png`.
+
+### Convergence and communication
+
+The convergence figure reports normalized-feature RMSE (the square root of normalized MSE). Local and centralized curves use epochs; FedAvg uses rounds, with one local epoch per RSU per round. The run used 10 local/centralized epochs and 20 FedAvg rounds.
+
+| Communication measure | Payload per round |
+|------------------------|------------------:|
+| One RSU upload | 71.8 KiB |
+| Uploads from all three RSUs | 215.4 KiB |
+| Three uploads plus three broadcasts | 430.8 KiB |
+
+These values are the float32 model payload size (18,380 parameters), repeated each round. The plot is `results/plots/weight_update_size.png`.
+
+### Inference latency
+
+On CPU, one three-step prediction averages 0.505 ms (standard deviation 0.085 ms over 200 timed runs, after 50 warm-up runs).
+
+## Discussion
+
+Centralized training has the lowest position and speed RMSE at each tested horizon, and serves as the pooled, privacy-unsafe reference. FedAvg improves on the mean local-only results at all three horizons for both position and speed.
+
+FedAvg also improves K=3 position RMSE over the local model in each RSU zone:
+
+| RSU zone | Local-only position RMSE | FedAvg position RMSE | Centralized position RMSE |
+|----------|-------------------------:|---------------------:|---------------------------:|
+| RSU 1 | 0.0545 m | 0.0509 m | 0.0484 m |
+| RSU 2 | 0.0548 m | 0.0477 m | 0.0436 m |
+| RSU 3 | 0.0705 m | 0.0604 m | 0.0546 m |
+
+Across the full gap, FedAvg reduces position error substantially compared with freezing the twin state. Centralized remains slightly more accurate than FedAvg, while FedAvg improves over each local-only model at the 500 ms endpoint. As a sanity reference, constant-velocity extrapolation on the same 599,807 test windows has position RMSE 0.0225 m, 0.0610 m, and 0.1123 m at K=1, 2, and 3; FedAvg is lower at each horizon. These results use smooth 100 ms NGSIM trajectories, so the low absolute errors should be interpreted in that dataset context.
+
+The FedAvg coordinator receives model parameters and scalar metrics from three separate RSU child processes; raw training and validation arrays remain in each worker. The processes share one host and OS account, so this simulation does not provide hardened filesystem isolation. The centralized baseline is intentionally privacy-unsafe.
 
 ## Limitations
 
@@ -221,7 +263,8 @@ The FedAvg model shows higher position RMSE when evaluated across all zones beca
 - Heading is treated as a raw radian value (no wraparound handling at ±π)
 - NGSIM data has known measurement noise in position values
 - FedAvg is standard averaging without formal differential privacy guarantees
-- Recursive prediction beyond 3 steps accumulates error
+- Recursive prediction beyond 3 steps can accumulate error; report the measured five-step result with its evaluation setup
+- RSU clients run in separate child processes, but share the host OS account and filesystem permissions; use separate machines or hardened containers and access controls for deployment isolation
 - Evaluated on CPU only (no GPU benchmarks)
 
 ## Team Contributions
