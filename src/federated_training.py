@@ -1,8 +1,9 @@
-"""Federated training orchestration using Flower simulation.
+"""Flower FedAvg orchestration with one child process per simulated RSU.
 
-Runs three RSU clients and a FedAvg server **in-process** via
-``flwr.simulation.start_simulation``.  No network sockets are opened;
-training is purely CPU-based.
+Each child loads only its assigned RSU partition and sends model parameters
+and scalar metrics to the coordinating process. This creates an application
+boundary for the simulation, but shared-host OS permissions are not a hardened
+security boundary.
 
 Usage (from repository root)
 ----------------------------
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import multiprocessing as mp
 import sys
 import time
 from collections import OrderedDict
@@ -42,9 +44,8 @@ from src.train_utils import (
     NormalizationStats,
     save_checkpoint,
 )
-from src.preprocessing import load_rsu_dataset
 from src.base_station import create_fedavg_strategy
-from src.rsu_client import RSUFlowerClient, make_rsu_client
+from src.rsu_client import make_rsu_client
 
 logger = logging.getLogger(__name__)
 
@@ -60,36 +61,13 @@ DEFAULT_MODEL_CONFIG = {
 }
 
 
-def compute_global_norm_stats(
-    data_dir: str = "data/rsu",
-) -> NormalizationStats:
-    """Compute normalization statistics from **all** RSU training partitions.
+def compute_shared_norm_stats() -> NormalizationStats:
+    """Return fixed shared scales without reading any RSU arrays."""
+    return NormalizationStats.from_public_physical_scales()
 
-    All RSU clients must normalise with the same statistics for consistent
-    loss comparisons and for the final checkpoint to be usable by the
-    ``RSUStatePredictor``.
-
-    Returns
-    -------
-    NormalizationStats
-        Statistics computed from the union of all RSU training sets.
-    """
-    all_X = []
-    all_y = []
-    for rsu_id in RSU_IDS:
-        X, y = load_rsu_dataset(rsu_id, split="train", data_directory=data_dir)
-        all_X.append(np.array(X))   # copy from mmap
-        all_y.append(np.array(y))
-    X_all = np.concatenate(all_X, axis=0)
-    y_all = np.concatenate(all_y, axis=0)
-    stats = NormalizationStats.from_training_data(X_all, y_all)
-    logger.info(
-        "Global norm stats computed from %d total training samples", len(X_all)
-    )
-    return stats
-
-
-def _build_client_fn(
+def _rsu_worker(
+    connection,
+    rsu_id: str,
     model_config: dict,
     norm_stats: NormalizationStats,
     data_dir: str,
@@ -98,39 +76,46 @@ def _build_client_fn(
     learning_rate: float,
     seed: int,
     device: str,
-):
-    """Return a closure that Flower simulation calls to create each client.
-
-    Flower's simulation backend calls ``client_fn(cid)`` where ``cid`` is a
-    string like ``"0"``, ``"1"``, ``"2"``.  We map these to RSU IDs.
-    """
-
-    def client_fn(cid: str) -> fl.client.NumPyClient:
-        idx = int(cid)
-        if idx < 0 or idx >= len(RSU_IDS):
-            raise ValueError(
-                f"Client ID {cid} out of range; expected 0..{len(RSU_IDS)-1}"
-            )
-        rsu_id = RSU_IDS[idx]
-        logger.info("Creating Flower client for %s (cid=%s)", rsu_id, cid)
-        return make_rsu_client(
-            rsu_id=rsu_id,
-            model_config=model_config,
-            norm_stats=norm_stats,
-            data_dir=data_dir,
-            local_epochs=local_epochs,
-            batch_size=batch_size,
-            learning_rate=learning_rate,
-            seed=seed + idx,   # slightly different seed per client
-            device=device,
+) -> None:
+    """Serve one RSU client in a dedicated process; raw partitions stay there."""
+    try:
+        client = make_rsu_client(
+            rsu_id=rsu_id, model_config=model_config, norm_stats=norm_stats,
+            data_dir=data_dir, local_epochs=local_epochs, batch_size=batch_size,
+            learning_rate=learning_rate, seed=seed, device=device,
         )
+        connection.send(("ready", None))
+        while True:
+            command = connection.recv()
+            if command is None:
+                break
+            action, parameters, config = command
+            if action == "fit":
+                result = client.fit(parameters, config)
+            elif action == "evaluate":
+                result = client.evaluate(parameters, config)
+            else:
+                raise ValueError(f"Unknown RSU worker action: {action}")
+            connection.send(("ok", result))
+    except BaseException as exc:
+        try:
+            connection.send(("error", f"{type(exc).__name__}: {exc}"))
+        except (BrokenPipeError, EOFError, OSError):
+            pass
+    finally:
+        connection.close()
 
-    return client_fn
+
+def _worker_result(connection, rsu_id):
+    status, payload = connection.recv()
+    if status != "ok":
+        raise RuntimeError(f"RSU worker {rsu_id} failed: {payload}")
+    return payload
 
 
 def run_federated_training(
     data_dir: str = "data/rsu",
-    rounds: int = 5,
+    rounds: int = 20,
     local_epochs: int = 1,
     batch_size: int = 256,
     learning_rate: float = 1e-3,
@@ -187,8 +172,8 @@ def run_federated_training(
     logger.info("  model_config  = %s", model_config)
     logger.info("  device        = %s", device)
 
-    # ---------- Normalization (all RSUs, training split only) ----------
-    norm_stats = compute_global_norm_stats(data_dir=data_dir)
+    # ---------- Shared fixed normalization; server reads no RSU arrays ----------
+    norm_stats = compute_shared_norm_stats()
 
     # ---------- Initial global model ----------
     global_model = VehicleStateGRU.from_config(model_config)
@@ -211,40 +196,95 @@ def run_federated_training(
         min_available_clients=num_clients,
     )
 
-    # ---------- Client factory ----------
-    client_fn = _build_client_fn(
-        model_config=model_config,
-        norm_stats=norm_stats,
-        data_dir=data_dir,
-        local_epochs=local_epochs,
-        batch_size=batch_size,
-        learning_rate=learning_rate,
-        seed=seed,
-        device=device,
-    )
-
-    # ---------- Simulation ----------
+    # ---------- Process-isolated Flower clients ----------
     start_time = time.time()
-    logger.info("Starting Flower simulation …")
+    logger.info("Starting process-isolated Flower FedAvg workers")
+    from flwr.common import Code, EvaluateRes, FitRes, Status
 
-    history = fl.simulation.start_simulation(
-        client_fn=client_fn,
-        num_clients=num_clients,
-        config=fl.server.ServerConfig(num_rounds=rounds),
-        strategy=strategy,
-    )
+    context = mp.get_context("spawn")
+    workers = []
+    try:
+        for idx, rsu_id in enumerate(RSU_IDS):
+            parent_conn, child_conn = context.Pipe()
+            process = context.Process(
+                target=_rsu_worker,
+                args=(child_conn, rsu_id, model_config, norm_stats, data_dir,
+                      local_epochs, batch_size, learning_rate, seed + idx, device),
+                name=f"{rsu_id}-flower-client",
+            )
+            process.start()
+            child_conn.close()
+            workers.append((rsu_id, parent_conn, process))
+
+        for rsu_id, connection, _ in workers:
+            status, payload = connection.recv()
+            if status != "ready":
+                raise RuntimeError(f"RSU worker {rsu_id} failed to initialize: {payload}")
+
+        round_train_loss = []
+        round_val_loss = []
+        global_ndarrays = initial_params
+        for server_round in range(1, rounds + 1):
+            logger.info("Flower FedAvg round %d/%d", server_round, rounds)
+            for _, connection, _ in workers:
+                connection.send(("fit", global_ndarrays, {"local_epochs": local_epochs}))
+            fit_results = []
+            for rsu_id, connection, _ in workers:
+                weights, num_examples, metrics = _worker_result(connection, rsu_id)
+                fit_res = FitRes(
+                    status=Status(code=Code.OK, message=""),
+                    parameters=ndarrays_to_parameters(weights),
+                    num_examples=num_examples,
+                    metrics=metrics,
+                )
+                fit_results.append((None, fit_res))
+
+            aggregated, fit_metrics = strategy.aggregate_fit(server_round, fit_results, [])
+            if aggregated is None:
+                raise RuntimeError(f"Flower FedAvg failed to aggregate round {server_round}")
+            global_ndarrays = parameters_to_ndarrays(aggregated)
+            round_train_loss.append(float(fit_metrics.get("train_loss", float("nan"))))
+
+            for _, connection, _ in workers:
+                connection.send(("evaluate", global_ndarrays, {}))
+            eval_results = []
+            for rsu_id, connection, _ in workers:
+                loss, num_examples, metrics = _worker_result(connection, rsu_id)
+                eval_res = EvaluateRes(
+                    status=Status(code=Code.OK, message=""),
+                    loss=float(loss),
+                    num_examples=num_examples,
+                    metrics=metrics,
+                )
+                eval_results.append((None, eval_res))
+            val_loss, _ = strategy.aggregate_evaluate(server_round, eval_results, [])
+            if val_loss is None:
+                raise RuntimeError(f"Flower FedAvg failed to aggregate validation round {server_round}")
+            round_val_loss.append(float(val_loss))
+            logger.info("Round %d complete: train_loss=%.6f val_loss=%.6f",
+                        server_round, round_train_loss[-1], round_val_loss[-1])
+    finally:
+        for _, connection, _ in workers:
+            try:
+                connection.send(None)
+            except (BrokenPipeError, EOFError, OSError):
+                pass
+        for _, connection, process in workers:
+            connection.close()
+            process.join(timeout=10)
+            if process.is_alive():
+                process.terminate()
+                process.join()
 
     elapsed = time.time() - start_time
-    logger.info("Simulation finished in %.1f s", elapsed)
+    logger.info("Process-isolated Flower FedAvg finished in %.1f s", elapsed)
 
-    # ---------- Log history ----------
-    if history.losses_distributed:
-        for rnd, loss in history.losses_distributed:
-            logger.info("  Round %d  distributed val_loss = %.6f", rnd, loss)
-    if history.metrics_distributed:
-        for key, values in history.metrics_distributed.items():
-            for rnd, val in values:
-                logger.info("  Round %d  %s = %.6f", rnd, key, val)
+    class _SimulationHistory:
+        losses_distributed = list(enumerate(round_val_loss, start=1))
+        metrics_distributed_fit = {"train_loss": list(enumerate(round_train_loss, start=1))}
+        metrics_distributed = {}
+
+    history = _SimulationHistory()
 
     # ---------- Extract final parameters & save checkpoint ----------
     # The strategy keeps the latest aggregated parameters
@@ -276,8 +316,16 @@ def run_federated_training(
     global_model.load_state_dict(state_dict, strict=True)
 
     # Save using Person 2's agreed checkpoint format
+    fit_metrics = getattr(history, "metrics_distributed_fit", {}) or {}
+    round_train_loss = [
+        float(value) for _, value in fit_metrics.get("train_loss", [])
+    ]
+    round_val_loss = [float(value) for _, value in history.losses_distributed]
+
     metadata = {
         "training_mode": "federated",
+        "client_execution": "separate_processes",
+        "position_encoding": "relative_to_last_observation",
         "strategy": "FedAvg",
         "num_rounds": rounds,
         "local_epochs": local_epochs,
@@ -287,6 +335,7 @@ def run_federated_training(
         "rsu_ids": list(RSU_IDS),
         "seed": seed,
         "elapsed_seconds": round(elapsed, 1),
+        "history": {"round_train_loss": round_train_loss, "round_val_loss": round_val_loss},
     }
     saved_path = save_checkpoint(
         global_model, norm_stats, checkpoint_path, metadata
@@ -313,8 +362,8 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--rounds",
         type=int,
-        default=5,
-        help="Number of federated rounds (default: 5)",
+        default=20,
+        help="Number of federated rounds (default: 20)",
     )
     parser.add_argument(
         "--local-epochs",

@@ -39,7 +39,7 @@ from src.train_utils import (
 )
 from src.local_training import run_local_training
 from src.centralized_training import run_centralized_training
-from src.federated_manual import run_federated_manual
+from src.federated_training import run_federated_training
 from src.checkpoints import (
     compute_weight_update_size,
     evaluate_all_regimes,
@@ -113,7 +113,7 @@ def run_full_pipeline(
     logger.info("=" * 70)
     fed_start = time.time()
     federated_checkpoint_path = str(models_dir_path / "fedavg_global.pt")
-    fed_results = run_federated_manual(
+    federated_checkpoint = run_federated_training(
         data_dir=data_dir,
         rounds=rounds,
         local_epochs=local_epochs_per_round,
@@ -124,7 +124,9 @@ def run_full_pipeline(
         seed=seed,
         device="cpu",
     )
-    fed_elapsed = time.time() - fed_start
+    _, _, fed_metadata = load_checkpoint(federated_checkpoint)
+    fed_results = {"history": fed_metadata.get("history", {})}
+    fed_elapsed = float(fed_metadata.get("elapsed_seconds", time.time() - fed_start))
     all_results["federated_training"] = {
         "elapsed_seconds": round(fed_elapsed, 1),
         "num_rounds": rounds,
@@ -176,26 +178,25 @@ def run_full_pipeline(
     all_results["evaluation"] = eval_results
 
     # ================================================================
-    # 5. 500 ms GAP EXPERIMENT
+    # 5. FULL 500 ms GAP EXPERIMENT
     # ================================================================
     logger.info("\n" + "=" * 70)
-    logger.info("STEP 5: 500 ms GAP EXPERIMENT")
+    logger.info("STEP 5: FULL 500 ms GAP EXPERIMENT")
     logger.info("=" * 70)
-    # Run gap experiment with ALL available checkpoints to find best model
+    # Each local checkpoint is evaluated only on its own RSU's test partition.
     gap_checkpoints = {
-        "federated": federated_checkpoint_path,
-        "centralized": centralized_checkpoint_path,
+        "federated": (federated_checkpoint_path, ("rsu_1", "rsu_2", "rsu_3")),
+        "centralized": (centralized_checkpoint_path, ("rsu_1", "rsu_2", "rsu_3")),
     }
-    # Also add best local model (rsu_2 typically has best RMSE due to highway mid-section)
     for rsu_id in ("rsu_1", "rsu_2", "rsu_3"):
         lpath = str(models_dir_path / "local" / f"local_{rsu_id}.pt")
         if Path(lpath).exists():
-            gap_checkpoints[f"local_{rsu_id}"] = lpath
+            gap_checkpoints[f"local_{rsu_id}"] = (lpath, (rsu_id,))
 
     gap_all = {}
     best_gap_name = None
     best_gap_improvement = -float("inf")
-    for gap_name, gap_ckpt in gap_checkpoints.items():
+    for gap_name, (gap_ckpt, evaluation_rsus) in gap_checkpoints.items():
         if not Path(gap_ckpt).exists():
             continue
         gr = run_gap_experiment(
@@ -203,6 +204,7 @@ def run_full_pipeline(
             data_dir=data_dir,
             gap_steps=5,
             batch_size=batch_size,
+            rsu_ids=evaluation_rsus,
         )
         gap_all[gap_name] = gr
         logger.info(
@@ -216,9 +218,11 @@ def run_full_pipeline(
             best_gap_improvement = gr["position_rmse_improvement_pct"]
             best_gap_name = gap_name
 
-    # Use the centralized model as the primary gap experiment result (best available)
-    primary_gap = gap_all.get("centralized", gap_all.get(best_gap_name, {}))
+    # FedAvg is the deployable privacy-preserving predictor. Centralized and
+    # local checkpoints remain comparison references in gap_experiment_all_models.
+    primary_gap = gap_all.get("federated", gap_all.get(best_gap_name, {}))
     all_results["gap_experiment"] = primary_gap
+    all_results["gap_experiment_primary_model"] = "federated" if "federated" in gap_all else best_gap_name
     all_results["gap_experiment_all_models"] = gap_all
     all_results["gap_experiment_best_model"] = best_gap_name
     logger.info(
@@ -343,20 +347,35 @@ def _print_summary(results: dict) -> None:
     # Gap experiment
     gap = results.get("gap_experiment", {})
     if gap:
-        print("\n--- 500 ms Telemetry Gap Experiment ---")
+        print(f"\n--- Gap Experiment: {gap.get('gap_duration_ms', 0)} ms evaluated of {gap.get('gap_duration_requested_ms', 0)} ms requested ({gap.get('num_test_samples', 0)} eligible windows) ---")
+        primary_name = results.get("gap_experiment_primary_model", "unknown")
         best_name = results.get("gap_experiment_best_model", "unknown")
-        print(f"Best model: {best_name}")
-        print(f"Freeze baseline position RMSE: {gap['freeze_overall_position_rmse']:.4f} m")
-        print(f"Model prediction position RMSE: {gap['model_overall_position_rmse']:.4f} m")
-        print(f"Improvement: {gap['position_rmse_improvement_pct']:.2f}%")
+        print(f"Primary model: {primary_name}; best comparison: {best_name}")
+        freeze_end = gap["freeze_position_rmse_per_step"][-1]
+        model_end = gap["model_position_rmse_per_step"][-1]
+        endpoint_improvement = gap.get(
+            "position_rmse_improvement_at_gap_end_pct",
+            (freeze_end - model_end) / freeze_end * 100,
+        )
+        print(f"K=5 / 500 ms freeze position RMSE: {freeze_end:.4f} m")
+        print(f"K=5 / 500 ms model position RMSE: {model_end:.4f} m")
+        print(f"K=5 / 500 ms improvement over freeze: {endpoint_improvement:.2f}%")
+        print(f"Five-horizon aggregate RMSE: freeze={gap['freeze_overall_position_rmse']:.4f} m, "
+              f"model={gap['model_overall_position_rmse']:.4f} m "
+              f"(improvement={gap['position_rmse_improvement_pct']:.2f}%)")
         # Print all models if available
         gap_all = results.get("gap_experiment_all_models", {})
         if gap_all:
             print("\n  Per-model gap results:")
             for mname, gr in gap_all.items():
-                print(f"  {mname:20s}  freeze={gr['freeze_overall_position_rmse']:.4f}m  "
-                      f"model={gr['model_overall_position_rmse']:.4f}m  "
-                      f"improvement={gr['position_rmse_improvement_pct']:.2f}%")
+                freeze_end = gr["freeze_position_rmse_per_step"][-1]
+                model_end = gr["model_position_rmse_per_step"][-1]
+                endpoint_improvement = gr.get(
+                    "position_rmse_improvement_at_gap_end_pct",
+                    (freeze_end - model_end) / freeze_end * 100,
+                )
+                print(f"  {mname:20s}  K=5 freeze={freeze_end:.4f}m  "
+                      f"model={model_end:.4f}m  improvement={endpoint_improvement:.2f}%")
 
     # Weight update size
     ws = results.get("weight_update_size", {})

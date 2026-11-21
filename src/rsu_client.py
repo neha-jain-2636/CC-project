@@ -32,6 +32,7 @@ from src.train_utils import (
     NormalizationStats,
     create_dataloader,
     evaluate,
+    encode_relative_position_windows,
     train_one_epoch,
 )
 from src.preprocessing import load_rsu_dataset
@@ -105,11 +106,17 @@ class RSUFlowerClient(fl.client.NumPyClient):
             rsu_id, split="validation", data_directory=data_dir
         )
 
-        # Copy from read-only memory maps, then normalise
-        X_train = norm_stats.normalize_input(np.array(X_train_raw))
-        y_train = norm_stats.normalize_target(np.array(y_train_raw))
-        X_val = norm_stats.normalize_input(np.array(X_val_raw))
-        y_val = norm_stats.normalize_target(np.array(y_val_raw))
+        # Copy from read-only memory maps, encode local displacement, then scale.
+        X_train_raw, y_train_raw = encode_relative_position_windows(
+            np.array(X_train_raw), np.array(y_train_raw)
+        )
+        X_val_raw, y_val_raw = encode_relative_position_windows(
+            np.array(X_val_raw), np.array(y_val_raw)
+        )
+        X_train = norm_stats.normalize_input(X_train_raw)
+        y_train = norm_stats.normalize_target(y_train_raw)
+        X_val = norm_stats.normalize_input(X_val_raw)
+        y_val = norm_stats.normalize_target(y_val_raw)
 
         self.train_loader = create_dataloader(
             X_train, y_train, batch_size=batch_size, shuffle=True

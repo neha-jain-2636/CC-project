@@ -68,6 +68,9 @@ def generate_all_plots(
     # ================================================================
     _plot_per_rsu_comparison(results, output_path)
 
+    # PLOT 6: Flower communication volume per round
+    _plot_weight_updates(results, output_path)
+
     logger.info("All plots saved to %s", output_path)
 
 
@@ -174,19 +177,20 @@ def _plot_convergence(results_path: Path, output_path: Path) -> None:
         ax2.plot(range(1, len(train_rmse) + 1), train_rmse,
                  label="FedAvg", color="#3498db", linewidth=2, marker="o", markersize=4)
 
-    ax1.set_xlabel("Epoch / Round")
-    ax1.set_ylabel("Validation RMSE")
+    ax1.set_xlabel("Local/centralized epoch; FedAvg round")
+    ax1.set_ylabel("Validation RMSE (normalized features)")
     ax1.set_title("Validation RMSE Convergence", fontweight="bold")
     ax1.legend(fontsize=8)
     ax1.grid(alpha=0.3)
 
-    ax2.set_xlabel("Epoch / Round")
-    ax2.set_ylabel("Training RMSE")
+    ax2.set_xlabel("Local/centralized epoch; FedAvg round")
+    ax2.set_ylabel("Training RMSE (normalized features)")
     ax2.set_title("Training RMSE Convergence", fontweight="bold")
     ax2.legend(fontsize=8)
     ax2.grid(alpha=0.3)
 
-    fig.tight_layout()
+    fig.text(0.5, 0.015, "FedAvg uses 1 local epoch per round", ha="center", fontsize=9)
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
     fig.savefig(output_path / "convergence_curves.png", dpi=150)
     plt.close(fig)
     logger.info("Saved convergence curves")
@@ -231,41 +235,79 @@ def _plot_gap_experiment(results: dict, output_path: Path) -> None:
     ax2.legend(fontsize=10)
     ax2.grid(alpha=0.3)
 
-    best_name = results.get("gap_experiment_best_model", "model")
+    best_name = results.get(
+        "gap_experiment_primary_model",
+        results.get("gap_experiment_best_model", "model"),
+    )
+    primary_label = {"federated": "FedAvg", "centralized": "Centralized"}.get(best_name, best_name)
+    endpoint_improvement = gap.get(
+        "position_rmse_improvement_at_gap_end_pct",
+        (gap["freeze_position_rmse_per_step"][-1] - gap["model_position_rmse_per_step"][-1])
+        / gap["freeze_position_rmse_per_step"][-1] * 100,
+    )
     fig.suptitle(
-        f"Gap Experiment ({best_name}) — Position improvement: {gap['position_rmse_improvement_pct']:.1f}%",
+        f"500 ms Gap ({primary_label}) - K=5 Position RMSE improvement: {endpoint_improvement:.2f}%",
         fontsize=12, fontweight="bold", y=1.02,
     )
     fig.tight_layout()
     fig.savefig(output_path / "gap_experiment.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    # Also plot a comparison across all models if available
+    # Compare all models in separate panels so sub-meter prediction error
+    # remains legible beside multi-meter freeze error.
     gap_all = results.get("gap_experiment_all_models", {})
     if gap_all and len(gap_all) > 1:
-        fig2, ax = plt.subplots(figsize=(10, 6))
-        model_names = []
-        freeze_vals = []
-        model_vals = []
-        for mname, gr in gap_all.items():
-            model_names.append(mname)
-            freeze_vals.append(gr["freeze_overall_position_rmse"])
-            model_vals.append(gr["model_overall_position_rmse"])
-
+        model_names = list(gap_all)
+        freeze_vals = [
+            gap_all[name]["freeze_position_rmse_per_step"][-1] for name in model_names
+        ]
+        model_vals = [
+            gap_all[name]["model_position_rmse_per_step"][-1] for name in model_names
+        ]
+        sample_counts = [gap_all[name]["num_test_samples"] for name in model_names]
+        short_names = {
+            "federated": "FedAvg",
+            "centralized": "Centralized",
+            "local_rsu_1": "Local RSU 1",
+            "local_rsu_2": "Local RSU 2",
+            "local_rsu_3": "Local RSU 3",
+        }
+        labels = [
+            f"{short_names.get(name, name)}\nn={count:,}"
+            for name, count in zip(model_names, sample_counts)
+        ]
         x = np.arange(len(model_names))
-        width = 0.35
-        ax.bar(x - width/2, freeze_vals, width, label="Freeze Baseline",
-               color="#e74c3c", alpha=0.85, edgecolor="black", linewidth=0.5)
-        ax.bar(x + width/2, model_vals, width, label="GRU Prediction",
-               color="#3498db", alpha=0.85, edgecolor="black", linewidth=0.5)
-        ax.set_xlabel("Model Checkpoint", fontsize=12)
-        ax.set_ylabel("Position RMSE (meters)", fontsize=12)
-        ax.set_title("Gap Experiment: All Models Comparison", fontsize=14, fontweight="bold")
-        ax.set_xticks(x)
-        ax.set_xticklabels(model_names, rotation=20, ha="right")
-        ax.legend(fontsize=10)
-        ax.grid(axis="y", alpha=0.3)
-        fig2.tight_layout()
+        fig2, (ax_freeze, ax_model) = plt.subplots(
+            1, 2, figsize=(14, 6), sharex=True
+        )
+        freeze_bars = ax_freeze.bar(
+            x, freeze_vals, color="#e74c3c", alpha=0.88,
+            edgecolor="black", linewidth=0.5,
+        )
+        model_bars = ax_model.bar(
+            x, model_vals, color="#3498db", alpha=0.88,
+            edgecolor="black", linewidth=0.5,
+        )
+        for axis, bars, values in (
+            (ax_freeze, freeze_bars, freeze_vals),
+            (ax_model, model_bars, model_vals),
+        ):
+            axis.bar_label(bars, labels=[f"{value:.3f} m" for value in values],
+                           padding=3, fontsize=9)
+            axis.set_xticks(x)
+            axis.set_xticklabels(labels, rotation=20, ha="right")
+            axis.grid(axis="y", alpha=0.3)
+            axis.set_ylim(0, max(values) * 1.2)
+        ax_freeze.set_title("Freeze baseline", fontweight="bold")
+        ax_freeze.set_ylabel("Position RMSE at 500 ms endpoint (meters)")
+        ax_model.set_title("Recursive GRU prediction", fontweight="bold")
+        ax_model.set_ylabel("Position RMSE at 500 ms endpoint (meters)")
+        fig2.suptitle(
+            "500 ms Gap: Freeze and Prediction RMSE by Model",
+            fontsize=14, fontweight="bold",
+        )
+        fig2.supxlabel("Model and eligible test-window count")
+        fig2.tight_layout(rect=(0, 0.02, 1, 0.93))
         fig2.savefig(output_path / "gap_experiment_all_models.png", dpi=150)
         plt.close(fig2)
         logger.info("Saved gap experiment all-models comparison plot")
@@ -317,6 +359,47 @@ def _plot_per_rsu_comparison(results: dict, output_path: Path) -> None:
     plt.close(fig)
     logger.info("Saved per-RSU comparison plot")
 
+
+
+def _plot_weight_updates(results: dict, output_path: Path) -> None:
+    """Plot per-client and network-wide Flower payload volume by round."""
+    import matplotlib.pyplot as plt
+
+    sizes = results.get("weight_update_size", {})
+    fed = results.get("federated_training", {})
+    rounds = int(fed.get("num_rounds", 0))
+    clients = int(sizes.get("model_config", {}).get("num_clients", 3))
+    if not sizes or rounds <= 0:
+        return
+
+    per_client_kb = float(sizes["kb_per_update"])
+    round_numbers = np.arange(1, rounds + 1)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(
+        round_numbers, np.full(rounds, per_client_kb),
+        color="#3498db", marker="o", linewidth=2,
+        label=f"One RSU upload ({per_client_kb:.1f} KB)",
+    )
+    ax.plot(
+        round_numbers, np.full(rounds, per_client_kb * clients),
+        color="#e67e22", marker="s", linewidth=2,
+        label=f"All RSU uploads ({per_client_kb * clients:.1f} KB)",
+    )
+    ax.plot(
+        round_numbers, np.full(rounds, per_client_kb * clients * 2),
+        color="#2ecc71", marker="^", linewidth=2,
+        label=f"Uploads + broadcasts ({per_client_kb * clients * 2:.1f} KB)",
+    )
+    ax.set_xlabel("FedAvg Round")
+    ax.set_ylabel("Model payload (KB, 1 KB = 1024 bytes)")
+    ax.set_title("Flower FedAvg Communication Volume per Round", fontweight="bold")
+    ax.set_xticks(round_numbers)
+    ax.grid(axis="y", alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_path / "weight_update_size.png", dpi=150)
+    plt.close(fig)
+    logger.info("Saved communication volume plot")
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate experiment plots")

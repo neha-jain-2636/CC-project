@@ -185,6 +185,15 @@ class RSUStatePredictor:
                 f"Input must be 2D [5, 4] or 3D [B, 5, 4], got {history.ndim}D"
             )
 
+        relative_encoding = (
+            self._metadata.get("position_encoding") == "relative_to_last_observation"
+        )
+        position_origin = None
+        if relative_encoding:
+            history = history.copy()
+            position_origin = history[:, -1:, :2].copy()
+            history[:, :, :2] -= position_origin
+
         # Normalize
         x_tensor = torch.from_numpy(history)
         x_norm = (x_tensor - self._input_mean) / self._input_std
@@ -193,8 +202,10 @@ class RSUStatePredictor:
         with torch.no_grad():
             pred_norm = self._model(x_norm)
 
-        # Inverse transform to physical units
+        # Inverse transform, then restore the absolute position origin.
         pred_phys = pred_norm * self._target_std + self._target_mean
+        if relative_encoding and position_origin is not None:
+            pred_phys[:, :, :2] += torch.from_numpy(position_origin)
         result = pred_phys.numpy().astype(np.float32)
 
         if single:
@@ -206,67 +217,41 @@ class RSUStatePredictor:
         history: np.ndarray,
         total_steps: int = 5,
     ) -> np.ndarray:
-        """Predict further into the future using recursive (autoregressive) prediction.
+        """Predict ``total_steps`` ahead, recursively, for one sample or a batch.
 
-        The primary model predicts 3 steps at a time.  For the 500 ms gap
-        experiment (5 steps at 100 ms each), this method:
-        1. Predicts the first 3 steps from the original 5-step history.
-        2. Constructs a new 5-step history from the last 2 original + 3 predicted.
-        3. Predicts the next 3 steps, takes only the first 2 to reach 5 total.
-
-        Parameters
-        ----------
-        history : ndarray
-            Shape ``[5, 4]`` — a single observed history.
-        total_steps : int
-            Total future steps to predict (default 5 for 500 ms at 100 ms).
-
-        Returns
-        -------
-        ndarray
-            Shape ``[total_steps, 4]`` — predicted states in physical units.
-
-        Notes
-        -----
-        Recursive prediction accumulates error.  This is documented and
-        expected.  The 500 ms gap experiment compares this strategy against
-        simply freezing the last observed state.
+        The trained model emits three steps per call. When more are requested,
+        its newest three predictions are appended to the rolling five-state
+        history and the next model output is used to continue the forecast.
         """
         history = np.asarray(history, dtype=np.float32)
-        if history.ndim != 2 or history.shape != (5, self._model.input_size):
+        single = history.ndim == 2
+        if single:
+            if history.shape != (5, self._model.input_size):
+                raise ValueError(
+                    f"history must be [5, {self._model.input_size}], got {history.shape}"
+                )
+            history = history[np.newaxis, :, :]
+        elif history.ndim != 3 or history.shape[1:] != (5, self._model.input_size):
             raise ValueError(
-                f"history must be [5, {self._model.input_size}], got {history.shape}"
+                f"history must be [5, {self._model.input_size}] or "
+                f"[B, 5, {self._model.input_size}], got {history.shape}"
             )
+        if not isinstance(total_steps, int) or total_steps <= 0:
+            raise ValueError("total_steps must be a positive integer")
 
-        predictions = []
-        current_history = history.copy()
+        outputs = []
+        current = history.copy()
+        remaining = total_steps
+        while remaining:
+            next_states = self.predict(current)
+            take = min(remaining, next_states.shape[1])
+            outputs.append(next_states[:, :take, :])
+            remaining -= take
+            if remaining:
+                current = np.concatenate((current[:, 3:, :], next_states), axis=1)[:, -5:, :]
 
-        while len(predictions) < total_steps:
-            # Predict next 3 steps
-            next_3 = self.predict(current_history)  # [3, 4]
-            remaining = total_steps - len(predictions)
-            take = min(len(next_3), remaining)
-            predictions.append(next_3[:take])
-
-            if len(predictions) >= total_steps:
-                break
-
-            # Build new history: last (5 - 3) = 2 from current + 3 predicted
-            obs_keep = 5 - self._model.prediction_steps
-            new_history = np.concatenate(
-                [current_history[obs_keep:], next_3],
-                axis=0,
-            )
-            # Take only last 5 steps as the new history window
-            current_history = new_history[-5:]
-
-            # Recount
-            total_predicted = sum(p.shape[0] for p in predictions)
-            if total_predicted >= total_steps:
-                break
-
-        result = np.concatenate(predictions, axis=0)
-        return result[:total_steps]
+        result = np.concatenate(outputs, axis=1)
+        return result[0] if single else result
 
     @property
     def metadata(self) -> dict:

@@ -61,6 +61,14 @@ def _write_rsu_data(
             y = (rng.randn(n, 3, 4) + 10.0).astype(np.float32)
             np.save(rsu_dir / f"{split}_X.npy", X)
             np.save(rsu_dir / f"{split}_y.npy", y)
+            index = np.zeros(n, dtype=[
+                ("recording_code", "u1"),
+                ("vehicle_id", "<i4"),
+                ("input_start_timestamp_ms", "<i8"),
+            ])
+            index["vehicle_id"] = RSU_IDS.index(rsu_id) + 1
+            index["input_start_timestamp_ms"] = np.arange(n, dtype=np.int64) * 100
+            np.save(rsu_dir / f"{split}_window_index.npy", index)
 
 
 # ---------------------------------------------------------------------------
@@ -78,13 +86,7 @@ class TestLocalTraining(unittest.TestCase):
 
     def test_train_local_model_returns_model_and_history(self):
         """Train one RSU's local model and verify output."""
-        X, y = [], []
-        for rsu_id in RSU_IDS:
-            Xr, yr = np.load(self.data_dir / rsu_id / "train_X.npy"), np.load(self.data_dir / rsu_id / "train_y.npy")
-            X.append(Xr); y.append(yr)
-        norm_stats = NormalizationStats.from_training_data(
-            np.concatenate(X), np.concatenate(y)
-        )
+        norm_stats = NormalizationStats.from_public_physical_scales()
         model, history = train_local_model(
             rsu_id="rsu_1",
             norm_stats=norm_stats,
@@ -238,9 +240,12 @@ class TestCheckpointUtils(unittest.TestCase):
         save_checkpoint(model, norm_stats, ckpt_path, {"training_mode": "test"})
 
         result = run_gap_experiment(ckpt_path, str(self.data_dir), batch_size=8)
-        self.assertEqual(result["gap_steps_evaluated"], 3)
-        self.assertEqual(len(result["freeze_position_rmse_per_step"]), 3)
-        self.assertEqual(len(result["model_position_rmse_per_step"]), 3)
+        self.assertEqual(result["gap_steps_evaluated"], 5)
+        self.assertEqual(result["gap_duration_ms"], 500)
+        self.assertEqual(result["gap_duration_requested_ms"], 500)
+        self.assertEqual(result["num_test_samples"], 42)
+        self.assertEqual(len(result["freeze_position_rmse_per_step"]), 5)
+        self.assertEqual(len(result["model_position_rmse_per_step"]), 5)
         self.assertGreater(result["freeze_overall_position_rmse"], 0)
 
 

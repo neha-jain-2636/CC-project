@@ -35,6 +35,7 @@ from src.train_utils import (
     compute_per_horizon_rmse,
     create_dataloader,
     evaluate,
+    encode_relative_position_windows,
     measure_inference_latency,
     save_checkpoint,
     train_one_epoch,
@@ -52,22 +53,9 @@ DEFAULT_MODEL_CONFIG = {
 }
 
 
-def compute_global_norm_stats(data_dir: str = "data/rsu") -> NormalizationStats:
-    """Compute normalization stats from all RSU training partitions.
-
-    Uses the same statistics across all training modes for fair comparison.
-    """
-    all_X, all_y = [], []
-    for rsu_id in RSU_IDS:
-        X, y = load_rsu_dataset(rsu_id, split="train", data_directory=data_dir)
-        all_X.append(np.array(X))
-        all_y.append(np.array(y))
-    X_all = np.concatenate(all_X, axis=0)
-    y_all = np.concatenate(all_y, axis=0)
-    stats = NormalizationStats.from_training_data(X_all, y_all)
-    logger.info("Global norm stats computed from %d total training samples", len(X_all))
-    return stats
-
+def compute_shared_norm_stats() -> NormalizationStats:
+    """Return fixed scales without reading any RSU data."""
+    return NormalizationStats.from_public_physical_scales()
 
 def train_local_model(
     rsu_id: str,
@@ -97,10 +85,16 @@ def train_local_model(
     X_train_raw, y_train_raw = load_rsu_dataset(rsu_id, "train", data_dir)
     X_val_raw, y_val_raw = load_rsu_dataset(rsu_id, "validation", data_dir)
 
-    X_train = norm_stats.normalize_input(np.array(X_train_raw))
-    y_train = norm_stats.normalize_target(np.array(y_train_raw))
-    X_val = norm_stats.normalize_input(np.array(X_val_raw))
-    y_val = norm_stats.normalize_target(np.array(y_val_raw))
+    X_train_raw, y_train_raw = encode_relative_position_windows(
+        np.array(X_train_raw), np.array(y_train_raw)
+    )
+    X_val_raw, y_val_raw = encode_relative_position_windows(
+        np.array(X_val_raw), np.array(y_val_raw)
+    )
+    X_train = norm_stats.normalize_input(X_train_raw)
+    y_train = norm_stats.normalize_target(y_train_raw)
+    X_val = norm_stats.normalize_input(X_val_raw)
+    y_val = norm_stats.normalize_target(y_val_raw)
 
     train_loader = create_dataloader(X_train, y_train, batch_size=batch_size, shuffle=True)
     val_loader = create_dataloader(X_val, y_val, batch_size=batch_size, shuffle=False)
@@ -165,7 +159,7 @@ def run_local_training(
     logger.info("  data_dir      = %s", data_dir)
     logger.info("  checkpoint_dir = %s", checkpoint_dir)
 
-    norm_stats = compute_global_norm_stats(data_dir)
+    norm_stats = compute_shared_norm_stats()
     results = {}
 
     for i, rsu_id in enumerate(RSU_IDS):
@@ -190,6 +184,7 @@ def run_local_training(
         ckpt_path = Path(checkpoint_dir) / f"local_{rsu_id}.pt"
         metadata = {
             "training_mode": "local",
+            "position_encoding": "relative_to_last_observation",
             "rsu_id": rsu_id,
             "epochs": epochs,
             "batch_size": batch_size,

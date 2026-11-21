@@ -45,7 +45,7 @@ from src.base_station import (
 from src.federated_training import (
     DEFAULT_MODEL_CONFIG,
     RSU_IDS,
-    compute_global_norm_stats,
+    compute_shared_norm_stats,
     parse_args,
     run_federated_training,
 )
@@ -336,7 +336,7 @@ class TestFederatedTrainingEndToEnd(unittest.TestCase):
 class TestCLIParsing(unittest.TestCase):
     def test_defaults(self):
         args = parse_args([])
-        self.assertEqual(args.rounds, 5)
+        self.assertEqual(args.rounds, 20)
         self.assertEqual(args.local_epochs, 1)
         self.assertEqual(args.batch_size, 256)
         self.assertEqual(args.seed, 42)
@@ -402,14 +402,12 @@ class TestCheckpointInterop(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestGlobalNormStats(unittest.TestCase):
-    def test_computes_from_all_rsus(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            data_dir = Path(tmpdir)
-            _write_rsu_data(data_dir, n_train=30, n_val=10)
-            stats = compute_global_norm_stats(data_dir=str(data_dir))
-            self.assertEqual(stats.input_mean.shape, (4,))
-            self.assertEqual(stats.input_std.shape, (4,))
-            self.assertTrue(np.all(stats.input_std > 0))
+    def test_uses_fixed_scales_without_reading_rsu_data(self):
+        stats = compute_shared_norm_stats()
+        self.assertEqual(stats.input_mean.shape, (4,))
+        self.assertEqual(stats.input_std.shape, (4,))
+        self.assertTrue(np.all(stats.input_std > 0))
+        np.testing.assert_array_equal(stats.input_std, [15.0, 15.0, 30.0, np.pi])
 
 
 if __name__ == "__main__":

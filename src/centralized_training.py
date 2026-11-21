@@ -34,6 +34,7 @@ from src.train_utils import (
     NormalizationStats,
     create_dataloader,
     evaluate,
+    encode_relative_position_windows,
     save_checkpoint,
     train_one_epoch,
 )
@@ -50,17 +51,9 @@ DEFAULT_MODEL_CONFIG = {
 }
 
 
-def compute_global_norm_stats(data_dir: str = "data/rsu") -> NormalizationStats:
-    """Compute normalization stats from all RSU training partitions."""
-    all_X, all_y = [], []
-    for rsu_id in RSU_IDS:
-        X, y = load_rsu_dataset(rsu_id, split="train", data_directory=data_dir)
-        all_X.append(np.array(X))
-        all_y.append(np.array(y))
-    X_all = np.concatenate(all_X, axis=0)
-    y_all = np.concatenate(all_y, axis=0)
-    return NormalizationStats.from_training_data(X_all, y_all)
-
+def compute_shared_norm_stats() -> NormalizationStats:
+    """Use the same fixed, data-independent scales as the RSU clients."""
+    return NormalizationStats.from_public_physical_scales()
 
 def run_centralized_training(
     data_dir: str = "data/rsu",
@@ -101,7 +94,7 @@ def run_centralized_training(
     logger.info("  checkpoint    = %s", checkpoint_path)
 
     # Compute normalization stats
-    norm_stats = compute_global_norm_stats(data_dir)
+    norm_stats = compute_shared_norm_stats()
 
     # Pool all RSU data
     all_X_train, all_y_train = [], []
@@ -128,7 +121,10 @@ def run_centralized_training(
         len(X_train), len(X_val),
     )
 
-    # Normalize
+    # Encode each target relative to its latest observation before scaling.
+    X_train, y_train = encode_relative_position_windows(X_train, y_train)
+    X_val, y_val = encode_relative_position_windows(X_val, y_val)
+
     X_train_norm = norm_stats.normalize_input(X_train)
     y_train_norm = norm_stats.normalize_target(y_train)
     X_val_norm = norm_stats.normalize_input(X_val)
@@ -168,6 +164,7 @@ def run_centralized_training(
     # Save checkpoint
     metadata = {
         "training_mode": "centralized",
+        "position_encoding": "relative_to_last_observation",
         "privacy_note": "PRIVACY-UNSAFE: all raw data pooled at central server",
         "epochs": epochs,
         "batch_size": batch_size,

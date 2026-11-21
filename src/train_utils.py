@@ -32,13 +32,11 @@ from src.model import VehicleStateGRU
 
 @dataclass
 class NormalizationStats:
-    """Per-feature normalization statistics computed from training data only.
+    """Per-feature normalization values for the four state features.
 
-    All arrays have shape ``[4]`` corresponding to
-    ``(x_m, y_m, speed_mps, heading_rad)``.
-
-    The same statistics must be used for local, federated, and centralized
-    experiments so that RMSE comparisons are valid.
+    The main experiment pipeline uses shared fixed physical scales so that RSU
+    clients can normalize independently without pooling private samples. The
+    optional ``from_training_data`` constructor remains for standalone uses.
     """
 
     input_mean: np.ndarray   # [4]
@@ -68,6 +66,19 @@ class NormalizationStats:
             raise ValueError(
                 "target_std contains near-zero values; cannot normalize safely"
             )
+
+    @classmethod
+    def from_public_physical_scales(cls) -> "NormalizationStats":
+        """Return shared, data-independent scales for all training regimes.
+
+        Fixed engineering scales avoid pooling RSU samples to calculate
+        normalization statistics. Position features are displacement from the
+        final observed state and both axes use a 15 m scale; speed uses 30 m/s
+        and heading uses pi radians.
+        """
+        means = np.zeros(4, dtype=np.float32)
+        scales = np.array([15.0, 15.0, 30.0, np.pi], dtype=np.float32)
+        return cls(means, scales, means.copy(), scales.copy())
 
     @classmethod
     def from_training_data(
@@ -166,6 +177,33 @@ class NormalizationStats:
             target_mean=np.array(d["target_mean"], dtype=np.float32),
             target_std=np.array(d["target_std"], dtype=np.float32),
         )
+
+
+def encode_relative_position_windows(
+    X: np.ndarray,
+    y: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Encode position in each window relative to its last observed state.
+
+    The function mutates writable float32 arrays to avoid unnecessary copies
+    of the large NGSIM partitions. Read-only or non-float32 inputs are copied.
+    Speed and heading remain in their original physical units.
+    """
+    X_array = np.asarray(X, dtype=np.float32)
+    y_array = np.asarray(y, dtype=np.float32)
+    if X_array.ndim != 3 or X_array.shape[1:] != (5, 4):
+        raise ValueError(f"X must have shape [N, 5, 4], got {X_array.shape}")
+    if y_array.ndim != 3 or y_array.shape[0] != X_array.shape[0] or y_array.shape[2] != 4:
+        raise ValueError(f"y must have shape [N, K, 4] matching X, got {y_array.shape}")
+    if not X_array.flags.writeable:
+        X_array = X_array.copy()
+    if not y_array.flags.writeable:
+        y_array = y_array.copy()
+
+    origin = X_array[:, -1:, :2].copy()
+    X_array[:, :, :2] -= origin
+    y_array[:, :, :2] -= origin
+    return X_array, y_array
 
 
 # ---------------------------------------------------------------------------
